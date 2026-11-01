@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Folder</title>
+<style>
+:root{--bg:#f5f3ee;--surface:#fff;--text:#1d2a2e;--muted:#5e6d71;--line:#d9d5ca;--accent:#1f6f78;--on-accent:#fff;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#12191b;--surface:#1b2528;--text:#e8efef;--muted:#9bacaf;--line:#2f3d41;--accent:#5cc2cc;--on-accent:#08191b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Georgia,serif;line-height:1.6}
+header,main{max-width:960px;margin:0 auto;padding:0 20px}
+header{padding-top:40px}
+h1{font-size:2.2rem;margin:0 0 4px;letter-spacing:-.02em}
+header p{margin:0;color:var(--muted)}
+nav{display:flex;gap:8px;margin:24px 0;flex-wrap:wrap;font-family:system-ui,sans-serif}
+button,.btn{font:inherit;font-family:system-ui,sans-serif}
+nav button{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:10px 18px;border-radius:999px;font-size:1rem;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+section{display:none;padding-bottom:60px}
+section.active{display:block}
+.note{color:var(--muted);border:1px dashed var(--line);padding:20px;border-radius:8px;font-family:system-ui,sans-serif}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:zoom-in;background:var(--line);display:block}
+.videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.videos iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:6px;background:#000}
+figure{margin:0}
+figcaption{font-family:system-ui,sans-serif;font-size:.9rem;color:var(--muted);margin-top:6px;word-break:break-all}
+ul.files{list-style:none;margin:0;padding:0;font-family:system-ui,sans-serif}
+ul.files li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+ul.files span{word-break:break-all}
+ul.files small{color:var(--muted);display:block}
+.dl{border:1px solid var(--accent);color:var(--accent);padding:6px 14px;border-radius:6px;text-decoration:none;white-space:nowrap}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:32px 20px;text-align:center;font-family:system-ui,sans-serif;background:var(--surface)}
+.drop button{background:var(--accent);color:var(--on-accent);border:0;padding:12px 22px;border-radius:8px;font-size:1rem;cursor:pointer;margin-top:8px}
+#log{list-style:none;padding:0;margin:16px 0 0;font-family:system-ui,sans-serif}
+#log li{padding:8px 0;border-bottom:1px solid var(--line);word-break:break-all}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;padding:16px;z-index:10;cursor:zoom-out}
+#lightbox.open{display:flex}
+#lightbox img{max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+<header>
+  <h1>World Folder</h1>
+  <p>Anyone can upload and view images, videos and files here.</p>
+</header>
+<main>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-tab="images">Images</button>
+    <button role="tab" aria-selected="false" data-tab="videos">Videos</button>
+    <button role="tab" aria-selected="false" data-tab="files">Files</button>
+    <button role="tab" aria-selected="false" data-tab="upload">Upload</button>
+  </nav>
+  <section id="images" class="active"></section>
+  <section id="videos"></section>
+  <section id="files"></section>
+  <section id="upload">
+    <div class="drop">
+      <p>Choose images, videos or files (up to 20 MB each).</p>
+      <input id="picker" type="file" multiple hidden>
+      <button id="pick">Choose files</button>
+    </div>
+    <ul id="log"></ul>
+  </section>
+</main>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+/* ===== PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES ===== */
+const SCRIPT_URL = "";
+/* ======================================================================= */
+const MAX_MB = 20;
+const $ = (s) => document.querySelector(s);
+
+function note(el, text){ el.innerHTML = ""; const p = document.createElement("p"); p.className = "note"; p.textContent = text; el.appendChild(p); }
+function size(n){ return n > 1048576 ? (n/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(n/1024))+" KB"; }
+
+async function load(){
+  if(!SCRIPT_URL){ ["images","videos","files"].forEach(id => note($("#"+id), "Add your Apps Script URL to index.html to start.")); return; }
+  let list;
+  try { list = await (await fetch(SCRIPT_URL)).json(); }
+  catch(e){ ["images","videos","files"].forEach(id => note($("#"+id), "Could not load files. Check the Apps Script URL and that access is set to Anyone.")); return; }
+
+  const imgs = list.filter(f => f.type.startsWith("image/"));
+  const vids = list.filter(f => f.type.startsWith("video/"));
+  const rest = list.filter(f => !f.type.startsWith("image/") && !f.type.startsWith("video/"));
+
+  const gi = $("#images"); gi.innerHTML = "";
+  if(!imgs.length) note(gi, "No images yet. Use the Upload tab to add some.");
+  else { const g = document.createElement("div"); g.className = "grid";
+    imgs.forEach(f => { const i = document.createElement("img");
+      i.src = "https://drive.google.com/thumbnail?id="+f.id+"&sz=w500"; i.alt = f.name; i.loading = "lazy";
+      i.onclick = () => { $("#lightbox img").src = "https://drive.google.com/thumbnail?id="+f.id+"&sz=w1600"; $("#lightbox").classList.add("open"); };
+      g.appendChild(i); }); gi.appendChild(g); }
+
+  const gv = $("#videos"); gv.innerHTML = "";
+  if(!vids.length) note(gv, "No videos yet. Use the Upload tab to add some.");
+  else { const g = document.createElement("div"); g.className = "videos";
+    vids.forEach(f => { const fig = document.createElement("figure"); const fr = document.createElement("iframe");
+      fr.src = "https://drive.google.com/file/d/"+f.id+"/preview"; fr.allow = "autoplay"; fr.allowFullscreen = true; fr.loading = "lazy";
+      const c = document.createElement("figcaption"); c.textContent = f.name; fig.append(fr, c); g.appendChild(fig); }); gv.appendChild(g); }
+
+  const gf = $("#files"); gf.innerHTML = "";
+  if(!rest.length) note(gf, "No files yet. Use the Upload tab to add some.");
+  else { const ul = document.createElement("ul"); ul.className = "files";
+    rest.forEach(f => { const li = document.createElement("li"); const s = document.createElement("span");
+      s.textContent = f.name; const sm = document.createElement("small"); sm.textContent = size(f.size); s.appendChild(sm);
+      const a = document.createElement("a"); a.className = "dl"; a.textContent = "Download";
+      a.href = "https://drive.google.com/uc?export=download&id="+f.id; a.target = "_blank"; a.rel = "noopener";
+      li.append(s, a); ul.appendChild(li); }); gf.appendChild(ul); }
+}
+
+function toBase64(file){
+  return new Promise((ok, fail) => { const r = new FileReader();
+    r.onload = () => ok(r.result.split(",")[1]); r.onerror = () => fail(r.error); r.readAsDataURL(file); });
+}
+
+async function upload(files){
+  const log = $("#log");
+  for(const file of files){
+    const li = document.createElement("li"); li.textContent = file.name + " — "; const st = document.createElement("b"); li.appendChild(st); log.prepend(li);
+    if(!SCRIPT_URL){ st.textContent = "Add the Apps Script URL first."; continue; }
+    if(file.size > MAX_MB*1048576){ st.textContent = "Too large (max "+MAX_MB+" MB)."; continue; }
+    st.textContent = "Uploading...";
+    try {
+      const data = await toBase64(file);
+      const res = await fetch(SCRIPT_URL, { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({ name:file.name, type:file.type || "application/octet-stream", data }) });
+      const out = await res.json();
+      st.textContent = out.ok ? "Uploaded" : "Failed: " + (out.error || "unknown error");
+    } catch(e){ st.textContent = "Failed. Check your connection and try again."; }
+  }
+  load();
+}
+
+$("#pick").onclick = () => $("#picker").click();
+$("#picker").onchange = (e) => { upload([...e.target.files]); e.target.value = ""; };
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id === b.dataset.tab));
+});
+$("#lightbox").onclick = () => $("#lightbox").classList.remove("open");
+load();
+</script>
+</body>
+</html>
