@@ -149,6 +149,20 @@ const $ = (s) => document.querySelector(s);
 function note(el, text){ el.innerHTML = ""; const p = document.createElement("p"); p.className = "note"; p.textContent = text; el.appendChild(p); }
 function size(n){ return n > 1048576 ? (n/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(n/1024))+" KB"; }
 function dlUrl(id){ return "https://drive.google.com/uc?export=download&id="+id; }
+async function saveFile(f, a){
+  const label = a.textContent; a.textContent = "Downloading..."; a.style.pointerEvents = "none";
+  try {
+    const out = await (await fetch(SCRIPT_URL + "?id=" + encodeURIComponent(f.id))).json();
+    if(!out.data) throw new Error(out.error || "no data");
+    const bin = atob(out.data), bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: out.type || "application/octet-stream" }));
+    const t = document.createElement("a"); t.href = url; t.download = f.name; document.body.appendChild(t); t.click(); t.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch(e){ window.open(dlUrl(f.id), "_blank"); }
+  a.textContent = label; a.style.pointerEvents = "";
+}
+function hookDl(a, f){ a.href = dlUrl(f.id); a.removeAttribute("target"); a.onclick = e => { e.preventDefault(); e.stopPropagation(); saveFile(f, a); }; }
 function ext(name){ const m = /\.([a-z0-9]{1,5})$/i.exec(name); return m ? m[1] : "file"; }
 
 async function load(){
@@ -168,8 +182,8 @@ async function load(){
       const b = document.createElement("button"); b.className = "open"; b.setAttribute("aria-label","Open "+f.name);
       const i = document.createElement("img"); i.src = "https://drive.google.com/thumbnail?id="+f.id+"&sz=w500"; i.alt = f.name; i.loading = "lazy";
       b.onclick = () => { $("#lightbox img").src = "https://drive.google.com/thumbnail?id="+f.id+"&sz=w1600";
-        $("#lbdl").href = dlUrl(f.id); $("#lightbox").classList.add("open"); };
-      const a = document.createElement("a"); a.className = "mini"; a.textContent = "Download"; a.href = dlUrl(f.id);
+        hookDl($("#lbdl"), f); $("#lightbox").classList.add("open"); };
+      const a = document.createElement("a"); a.className = "mini"; a.textContent = "Download"; hookDl(a, f);
       a.target = "_blank"; a.rel = "noopener"; a.setAttribute("aria-label","Download "+f.name);
       b.appendChild(i); w.append(b, a); g.appendChild(w); }); gi.appendChild(g); }
 
@@ -179,7 +193,7 @@ async function load(){
     vids.forEach(f => { const c = document.createElement("div"); c.className = "vcard"; const fr = document.createElement("iframe");
       fr.src = "https://drive.google.com/file/d/"+f.id+"/preview"; fr.allow = "autoplay"; fr.allowFullscreen = true; fr.loading = "lazy"; fr.title = f.name;
       const p = document.createElement("p"); p.textContent = f.name;
-      const a = document.createElement("a"); a.className = "dl"; a.textContent = "Download"; a.href = dlUrl(f.id); a.target = "_blank"; a.rel = "noopener";
+      const a = document.createElement("a"); a.className = "dl"; a.textContent = "Download"; hookDl(a, f);
       c.append(fr, p, a); g.appendChild(c); }); gv.appendChild(g); }
 
   const gf = $("#files"); gf.innerHTML = "";
@@ -190,7 +204,7 @@ async function load(){
       const s = document.createElement("div"); s.className = "nm"; s.textContent = f.name;
       const sm = document.createElement("small"); sm.textContent = size(f.size); s.appendChild(sm);
       const a = document.createElement("a"); a.className = "dl"; a.textContent = "Download";
-      a.href = dlUrl(f.id); a.target = "_blank"; a.rel = "noopener";
+      hookDl(a, f);
       li.append(e, s, a); ul.appendChild(li); }); gf.appendChild(ul); }
 }
 
@@ -235,7 +249,6 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id === b.dataset.tab));
 });
 $("#lightbox").onclick = () => $("#lightbox").classList.remove("open");
-$("#lbdl").onclick = e => e.stopPropagation();
 load();
 </script>
 </body>
